@@ -1,0 +1,77 @@
+#------- Days to predict ---------
+PREDICTION_SPAN = 1
+#---------------------------------
+
+import yfinance
+import math
+import datetime
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from sklearn import preprocessing, model_selection
+
+df = yfinance.Ticker("BTC-USD").history(period="1d", start="1983-01-01", end="2024-12-24")
+df = df.drop(columns=["Stock Splits", "Dividends"])
+
+df1 = df["Close"].tail(10)
+
+df = df[["Open", "High", "Low", "Close", "Volume"]]
+df['HL_PCT'] = (df["High"] - df["Close"]) / df["Close"] * 100.0
+df['PCT_Change'] = (df["Close"] - df["Open"]) / df["Open"] * 100.0
+
+#-------------------------------------------------------------------
+
+import pandas_ta as ta
+df["EMA_10"] = ta.ema(df.Close, length=10)
+
+df["EMA_100"] = ta.ema(df.Close, length=100)
+
+df["EMA_200"] = ta.ema(df.Close, length=200)
+
+df["ADX"] = ta.adx(high=df["High"], low=df["Low"], close=df["Close"])["ADX_14"]
+
+df["ATR"] = ta.atr(high=df["High"], low=df["Low"], close=df["Close"])
+
+df["VWAP"] = ta.vwap(high=df["High"], low=df["Low"], close=df["Close"], volume=df["Volume"])
+
+#-------------------------------------------------------------------
+
+
+df = df[["Close", "HL_PCT", "PCT_Change", "Volume", "ATR", "EMA_10", "EMA_100", "ADX", "VWAP"]]
+forecast_col = "Close"
+df.fillna(-99999, inplace=True)
+
+forecast_out = PREDICTION_SPAN
+
+df["label"] = df[forecast_col].shift(-forecast_out)
+x = np.array(df.drop(["label"], axis=1))
+x = preprocessing.scale(x)
+x_lately = x[-forecast_out:]
+x = x[:-forecast_out]
+df.dropna(inplace=True)
+y = np.array(df["label"])
+x_train, x_test, y_train, y_test = model_selection.train_test_split(x, y, test_size=0.3, random_state=42)
+
+x_train = x_train.reshape((x_train.shape[0], 1, x_train.shape[1]))
+x_test = x_test.reshape((x_test.shape[0], 1, x_test.shape[1]))
+x_lately = x_lately.reshape((x_lately.shape[0], 1, x_lately.shape[1]))
+
+model = tf.keras.Sequential([
+      tf.keras.layers.LSTM(150, activation='relu', return_sequences = True),
+      tf.keras.layers.LSTM(150, activation='relu', return_sequences = True),
+      tf.keras.layers.LSTM(150, activation='relu'),
+      tf.keras.layers.Dense(1)
+])
+model.compile(optimizer='adam', loss='mean_squared_error')
+
+model.fit(x_train, y_train, epochs=10, batch_size=32, validation_data=(x_test, y_test), verbose = 2)
+accuracy = model.evaluate(x_test, y_test)
+print("Test Loss (Accuracy):", accuracy)
+
+forecast_set_LSTM = model.predict(x_lately)
+forecast_set = []
+print("Forecasted Values:", forecast_set_LSTM)
+for j in range(PREDICTION_SPAN):
+  forecast_set.append(forecast_set_LSTM[j][0])
+
+print(forecast_set)
