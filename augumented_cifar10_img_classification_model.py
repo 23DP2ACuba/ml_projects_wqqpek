@@ -27,7 +27,7 @@ def augument(image, label):
   if tf.random.uniform((), minval = 0, maxval = 1)<0.1:
     image = tf.tile(tf.image.rgb_to_grayscale(image), [1, 1, 3])
 
-  image = tf.image.random_contrast(image, lower=.1, upper=.2)
+  image = tf.image.random_contrast(image, lower=0.8, upper=1.2)
   image = tf.image.random_flip_left_right(image)
 
   return image, label
@@ -46,7 +46,7 @@ BATCH_SIZE = 32
 ds_train = ds_train.map(normalize_img, num_parallel_calls=AUTOTUNE)
 ds_train = ds_train.cache()
 ds_train = ds_train.shuffle(ds_info.splits["train"].num_examples)
-#ds_train = ds_train.map(augument, num_parallel_calls=AUTOTUNE)
+ds_train = ds_train.map(augument, num_parallel_calls=AUTOTUNE)
 ds_train = ds_train.batch(BATCH_SIZE)
 ds_train = ds_train.prefetch(AUTOTUNE)
 
@@ -59,13 +59,18 @@ model = keras.Sequential(
     [
         keras.Input(shape=(32,32,3)),
         data_augumentation,
-        layers.Conv2D(64, 3, padding='valid', activation=LeakyReLU(alpha=0.05)),
-        layers.Conv2D(128, 3, padding='valid', activation=LeakyReLU(alpha=0.05)),
-        layers.Dropout(0.20),
+        layers.Conv2D(32, 3, padding='same', activation=LeakyReLU(alpha=0.05)),
+        layers.BatchNormalization(),
+        layers.Conv2D(64, 3, padding='same', activation=LeakyReLU(alpha=0.05)),
+        layers.BatchNormalization(),
+        layers.Conv2D(128, 3, padding='same', activation=LeakyReLU(alpha=0.05)),
+        layers.BatchNormalization(),
+        layers.Dropout(0.25),
         layers.MaxPooling2D(),
-        layers.Conv2D(256, 3, padding='valid', activation=LeakyReLU(alpha=0.05)),
-        layers.Flatten(),
-        layers.Dense(1024, activation=LeakyReLU(alpha=0.05)),
+        layers.Conv2D(256, 3, padding='same', activation=LeakyReLU(alpha=0.05)),
+        layers.BatchNormalization(),
+        layers.GlobalAveragePooling2D(),
+        layers.Dense(512, activation=LeakyReLU(alpha=0.05)),
         layers.Dropout(0.5),
         layers.Dense(10, activation='softmax'),
     ]
@@ -77,5 +82,5 @@ model.compile(
     metrics = ["accuracy"]
 )
 
-model.fit(ds_train, epochs=10, verbose=1)
+model.fit(ds_train, epochs=30, verbose=1)
 model.evaluate(ds_test)
