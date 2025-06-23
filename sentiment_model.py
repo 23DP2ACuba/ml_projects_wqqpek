@@ -1,3 +1,7 @@
+"""
+IMDB Reviews Sentiment alanisys
+"""
+
 import tensorflow_datasets as tfds
 import tensorflow as tf
 from tensorflow.keras.layers import TextVectorization
@@ -25,3 +29,15 @@ x_train, y_train = lemmatizatize_ds(ds_train)
 
 MAX_VOCAB_SIZE = 10000
 MAX_SEQUENCE_LENGTH = 250
+
+vectorizer = TextVectorization(
+    max_tokens=MAX_VOCAB_SIZE,
+    output_mode='int',
+    output_sequence_length=MAX_SEQUENCE_LENGTH,
+    pad_to_max_tokens=True,
+)
+
+x_test = vectorizer.adapt(x_test)
+y_test = vectorizer.adapt(y_test)
+x_train = vectorizer.adapt(x_train)
+y_train = vectorizer.adapt(y_train)
