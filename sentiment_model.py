@@ -3,6 +3,8 @@ IMDB Reviews Sentiment alanisys
 """
 
 import tensorflow_datasets as tfds
+import tensorflow.keras 
+import keras.layers
 import tensorflow as tf
 from tensorflow.keras.layers import TextVectorization
 import spacy
@@ -38,6 +40,24 @@ vectorizer = TextVectorization(
 )
 
 x_test = vectorizer.adapt(x_test)
-y_test = vectorizer.adapt(y_test)
 x_train = vectorizer.adapt(x_train)
-y_train = vectorizer.adapt(y_train)
+y_train = tf.constant(y_train)
+y_test = tf.constant(y_test)
+
+model = keras.Sequential(
+    [
+        layers.Dense(64, activation="relu"),
+        layers.Dense(64, activation="relu"),
+        layers.Dense(32, activation="relu"),
+        layers.Dense(1, activation="softmax"),
+    ]
+)
+
+model.compile(
+    loss = keras.losses.BinaryCrossentropy(),
+    optimizer = keras.optimizers.Adam(3e-4),
+    metrics = ["accuracy"]
+)
+
+model.fit(x_train, y_train, epochs=30, verbose=1)
+model.evaluate(x_test, y_test)
