@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
 from sklearn.svm import SVC
 import pandas_ta as ta
 import yfinance as yf
@@ -56,13 +57,23 @@ y = data["Target"]
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.15, shuffle=False)
 
-pipeline = Pipeline([
+cluster_pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('clf', KMeans(n_clusters=3))
+])
+
+cluster_pipeline.fit(x)
+
+x_train["market_state"] = cluster_pipeline.predict(x_train)
+x_test["market_state"] = cluster_pipeline.predict(x_test)
+
+svc_pipeline = Pipeline([
     ("scaler", StandardScaler()),
     ("model", SVC(max_iter=10000))
 ])
 
-pipeline.fit(x_train, y_train)
-y_pred = pipeline.predict(x_test)
+svc_pipeline.fit(x_train, y_train)
+y_pred = svc_pipeline.predict(x_test)
 print("Accuracy score: ", accuracy_score(y_test, y_pred))
 
 #Test
