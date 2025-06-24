@@ -38,3 +38,15 @@ pipeline = Pipeline([
 ])
 
 pipeline.fit(x)
+
+def accuracy(x: np.array, y: np.array) -> float:
+  score = 0
+  for i in range(len(x)):
+    inp = np.array(x[i].astype(float))
+    inp = inp.reshape(-1, len(inp))
+    y_act = y[i]
+    y_pred = pipeline.predict(inp)
+    score += y_act == y_pred
+  return score/len(y)
+print(f"accuracy: {accuracy(x, y)}")
+df
