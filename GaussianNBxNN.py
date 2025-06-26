@@ -20,12 +20,12 @@ START = "2015-01-01"
 END = "2025-04-17"
 PERIOD = "1d"
 BATCH_SIZE = 32
-LOOKBACK = 5
-LOOKAHEAD = 5
+LOOKBACK = 7
+LOOKAHEAD = 1
 expected_return = 2
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.1
 EPOCHS = 100
-DROPOUT = 0.2
+DROPOUT = 0.3
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # ----------------------------------
 
@@ -56,7 +56,7 @@ def over_npct_span(data):
     return data
 
 def over_npct(data):
-    data["overn"] = np.where(data["return"] > 2.0, 1, 0)
+    data["overn"] = np.where(data["return"] > expected_return, 1, 0)
     return data
 
 
@@ -81,13 +81,12 @@ def compute_atr(data, period=14):
 
 
 data = add_lookback(data)
-data = return_over_period(data)
-data = VWAP(data)
+#data = VWAP(data)
 data = compute_atr(data)
 #data = compute_rsi(data)
 data = return_over_period(data)
 data = add_pct_chng(data)
-data = over_npct(data)
+data = over_npct_span(data)
 data.dropna(inplace=True)
 
 feature_columns = data.columns.difference(["overn", "return", "high", "low"])
@@ -99,58 +98,76 @@ x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.15, shuffl
 #x_train, x_val, y_train, y_val = train_test_split(x_train, y_train, test_size=0.1, shuffle=False)
 
 scaler = StandardScaler()
-#x_train = scaler.fit_transform(x_train)
-#x_test = scaler.transform(x)
+
+x_train = torch.tensor(scaler.fit_transform(x_train), dtype=torch.float32)
+x_test = torch.tensor(scaler.transform(x_test), dtype=torch.float32)
+y_train_tensor = torch.tensor(y_train, dtype=torch.long)
+y_test_tensor = torch.tensor(y_test, dtype=torch.long)
+
+class GaussianNBLayer(nn.Module):
+  def __init__(self, num_features, num_classes):
+    super().__init__()
+    self.num_classes = num_classes
+    self.num_features = num_features
+
+    self.means = nn.Parameter(torch.randn(num_classes, num_features))
+    self.log_vars = nn.Parameter(torch.zeros(num_classes, num_features))
+    self.log_priors = nn.Parameter(torch.zeros(num_classes))
+
+  def forward(self, x):
+    means = self.means.unsqueeze(0)
+    vars = torch.exp(self.log_vars).unsqueeze(0)
+    x = x.unsqueeze(1)
+
+    log_likelyhood = -0.5 * torch.sum(
+        torch.log(2 * 3.14159265359 * vars) + ((x - means) ** 2) / vars,
+        dim=2
+    )
+
+    log_posteriors = self.log_priors + log_likelyhood
+    return log_posteriors
 
 
-pipeline = Pipeline([
-    ("scaler", StandardScaler()),
-    ("clf", GaussianNB())
-])
-
-pipeline.fit(x_train, y_train)
-
-x_train_logprobs = pipeline.predict_log_proba(x_train)
-x_test_logprobs = pipeline.predict_log_proba(x_test)
-
-x_train_tensor = torch.tensor(x_train_logprobs, dtype=torch.float32)
-x_test_tensor = torch.tensor(x_test_logprobs, dtype=torch.float32)
-
-print(x_train_tensor.shape)
-class NBNeuralNet(nn.Module):
+class MLP(nn.Module):
   def __init__(self, input_dim, hidden_dim, output_dim):
     super().__init__()
     self.layers = nn.Sequential(
         nn.Linear(input_dim, hidden_dim),
         nn.ReLU(),
-        nn.Linear(hidden_dim, hidden_dim),
-        nn.ReLU(),
         nn.Linear(hidden_dim, output_dim)
     )
+
   def forward(self, x):
     return self.layers(x)
 
-model = NBNeuralNet(input_dim=2, hidden_dim=32, output_dim=1)
+class HybrinMLPGaussianNB(nn.Module):
+  def __init__(self, input_dim, hidden_dim, output_dim, num_features, num_classes):
+    super().__init__()
+    self.mlp = MLP(input_dim=input_dim, hidden_dim=hidden_dim, output_dim=output_dim)
+    self.nb = GaussianNBLayer(num_classes=num_classes, num_features=num_features)
 
-loss_fn = nn.BCEWithLogitsLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+  def forward(self, x):
+    log_probs = self.nb(x)
+    return self.mlp(log_probs)
 
-y_train_tensor = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1)
-y_test_tensor = torch.tensor(y_test, dtype=torch.float32).unsqueeze(1)
+#tensor b shape -> num_features
+num_features = x_train.shape[1]
+num_classes = 2
+input_dim= num_classes
+output_dim = num_classes
+hidden_dim = 256
+
+model = HybrinMLPGaussianNB(input_dim, hidden_dim, output_dim, num_features, num_classes)
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+loss_fn = nn.CrossEntropyLoss()
+
+
+
 
 for epoch in range(EPOCHS):
+    model.train()
     optimizer.zero_grad()
-    logits = model(x_train_tensor)
+    logits = model(x_train)
     loss = loss_fn(logits, y_train_tensor)
     loss.backward()
     optimizer.step()
-
-    if epoch % 10 == 0:
-        with torch.no_grad():
-            preds = torch.sigmoid(model(x_train_tensor)) > 0.5
-            train_acc = (preds.float() == y_train_tensor).float().mean().item()
-            print(f"Epoch {epoch} | Train Accuracy: {train_acc:.4f}")
-
-            test_preds = torch.sigmoid(model(x_test_tensor)) > 0.5
-            test_acc = (test_preds.float() == y_test_tensor).float().mean().item()
-            print(f"Epoch {epoch} | Test Accuracy: {test_acc:.4f}")
