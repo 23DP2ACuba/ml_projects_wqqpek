@@ -171,3 +171,18 @@ for epoch in range(EPOCHS):
     loss = loss_fn(logits, y_train_tensor)
     loss.backward()
     optimizer.step()
+
+    if epoch % 10 == 0:
+        with torch.no_grad():
+            model.eval()
+            train_preds = torch.argmax(model(x_train), dim=1)
+            train_acc = (train_preds == y_train_tensor).float().mean().item()
+
+            test_preds = torch.argmax(model(x_test), dim=1)
+            test_acc = (test_preds == y_test_tensor).float().mean().item()
+
+            print(f"Epoch {epoch} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}")
+
+print(f"Epoch {epoch} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}")
+
+
