@@ -54,7 +54,7 @@ class IchimokuCloudStrategy(Strategy):
         elif self.position.is_short and price > cloud_top:
             self.position.close()
 
-class Train():
+class GridSearch():
     def __init__(self, start, end, start_val, end_val, ticker):
         self.start = start
         self.end = end
@@ -83,9 +83,13 @@ class Train():
 
         for train in [True, False]:
             if train == False:
+                print("testing strategy>>")
                 self.start = self.start_val
                 self.end = self.end_val
             
+            else:
+                print("Optimizing strategy")
+
             self.data = yf.Ticker(self.ticker).history(start=self.start, end=self.end)
             self.data.drop(columns=["Stock Splits", "Dividends"], inplace=True, errors='ignore')
             self.data = self.data.dropna()
@@ -115,16 +119,16 @@ class Train():
                 break
 
             print(stats)
-
+            
         if plot == True:
            self.bt.plot()
 
 if __name__ == "__main__":
-    strat = Train(
+    strat = GridSearch(
         start = "2020-01-01",
         end = "2024-06-16",
         start_val = "2024-06-16",
         end_val = "2025-06-27",
-        ticker = "NVDA"
+        ticker = "BTC"
     )
     strat.optim()
