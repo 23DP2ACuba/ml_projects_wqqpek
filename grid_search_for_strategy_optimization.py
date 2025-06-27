@@ -119,7 +119,10 @@ class GridSearch():
                 break
 
             print(stats)
-            
+            print(f"tenkan_period: {stats._strategy.tenkan_period}")
+            print(f"kijun_period: {stats._strategy.kijun_period}")
+            print(f"senkou_period: {stats._strategy.senkou_period}")
+
         if plot == True:
            self.bt.plot()
 
@@ -129,6 +132,6 @@ if __name__ == "__main__":
         end = "2024-06-16",
         start_val = "2024-06-16",
         end_val = "2025-06-27",
-        ticker = "BTC"
+        ticker = "NVDA"
     )
     strat.optim()
