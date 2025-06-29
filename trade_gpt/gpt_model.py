@@ -71,24 +71,21 @@ features = [
 
 data = data[features]
 
-# ---- features -------
-n_input_features = len(features)
-# ---------------------
-
-
 n = int(0.9 * len(data))
 train_data = data[:n]
 val_data = data[n:]
 
 cluster_pipeline = Pipeline([
     ('scaler', StandardScaler()),
-    ('clf', KMeans(n_clusters=7))
+    ('clf', KMeans(n_clusters=5))
 ])
 
 cluster_pipeline.fit(train_data)
 
 train_data["market_state"] = cluster_pipeline.predict(train_data)
 val_data["market_state"] = cluster_pipeline.predict(val_data)
+
+features = train_data.columns
 
 scaler = StandardScaler()
 train_data = scaler.fit_transform(train_data)
@@ -97,4 +94,15 @@ val_data = scaler.fit_transform(val_data)
 train_data = torch.tensor(train_data, dtype=torch.float32)
 val_data = torch.tensor(val_data, dtype=torch.float32)
 
-train_data
+# ---- features -------
+n_input_features = len(features)
+# ---------------------
+
+def get_batch(train=True):
+    data_split = train_data if train else val_data
+    ix = torch.randint(len(data_split) - block_size, (BATCH_SIZE,))
+    x = torch.stack([data_split[i:i+block_size] for i in ix]).to(device)
+    y = torch.stack([data_split[i+1:i+block_size+1] for i in ix]).to(device)
+    return x, y
+
+get_batch()
