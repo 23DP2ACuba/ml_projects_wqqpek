@@ -216,3 +216,34 @@ class GPT(nn.Module):
     return idx
 
 model = GPT().to(device)
+print(sum(p.numel() for p in model.parameters())/1e6, 'M parameters')
+
+
+@torch.no_grad()
+def estimate_loss():
+    out = {}
+    model.eval()
+    for split in [True, False]:
+        losses = torch.zeros(eval_iter)
+        for k in range(eval_iter):
+            x, y = get_batch(split)
+            logits, loss = model(x, y)
+            losses[k] = loss.item()
+        out[split] = losses.mean()
+    model.train()
+    return out
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+train = True
+for iter in range(max_iters):
+    if iter % eval_interval == 0:
+        losses = estimate_loss()
+        print(losses)
+
+    xb, yb = get_batch(train)
+
+    logits, loss = model(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+print(loss.item())
