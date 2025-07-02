@@ -51,7 +51,8 @@ data["momentum_3"] = data['close'] - data['close'].shift(5)
 
 data['future_return'] = data['close'].shift(-5) / data['close'] - 1
 threshold = 0.002
-data['target'] = pd.qcut(data['future_return'], q=2, labels=[1, 0])
+data['target'] = data['future_return'].apply(lambda x: 1 if x > threshold else 0)
+#data['target'] = pd.qcut(data['future_return'], q=2, labels=[1, 0])
 data.dropna(inplace=True)
 
 x = data[features]
