@@ -106,3 +106,43 @@ class MCDropoutNN(nn.Module):
       train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=False)
       test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
       return train_loader, test_loader
+
+
+def train(EPOCHS, train_loader, test_loader):
+    for epoch in range(EPOCHS):
+        model.train()
+        for xb, yb in train_loader:
+            optimizer.zero_grad()
+            logits = model(xb)
+            loss = loss_fn(logits, yb)
+            loss.backward()
+            optimizer.step()
+
+        if epoch % 10 == 0:
+            model.eval()
+            with torch.no_grad():
+                correct, total = 0, 0
+                for xb, yb in test_loader:
+                    preds = torch.argmax(model(xb), dim=1)
+                    correct += (preds == yb).sum().item()
+                    total += yb.size(0)
+                test_acc = correct / total
+
+                correct, total = 0, 0
+                for xb, yb in train_loader:
+                    preds = torch.argmax(model(xb), dim=1)
+                    correct += (preds == yb).sum().item()
+                    total += yb.size(0)
+                train_acc = correct / total
+
+                print(f"Epoch {epoch} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}")
+
+    print(f"Final Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}")
+
+input_dim, hidden_dim, output_dim = x.shape[1], 320, 3
+model = MCDropoutNN(input_dim, hidden_dim, output_dim)
+optimizer = torch.optim.Adam(lr=0.001, params = model.parameters())
+loss_fn = nn.CrossEntropyLoss()
+x_train, x_test, y_train, y_test = model.process(x, y)
+train_loader, test_loader = model.load(x_train, x_test, y_train, y_test, BATCH_SIZE)
+train(EPOCHS, train_loader, test_loader)
