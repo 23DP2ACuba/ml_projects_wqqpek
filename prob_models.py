@@ -187,3 +187,12 @@ class AdditiveBNN(PyroModule):
       ods = pyro.sample("ods", dist.Normal(mean.squeeze(-1), sigma), ods = y)
     return mean
 
+scaler = StandardScaler()
+x_train = scaler.fit_transform(x_train)
+x_test = scaler.transform(x_test)
+
+y_train = torch.tensor(y_train, dtype=torch.float32)
+x_train = torch.tensor(x_train, dtype=torch.float32)
+
+y_test = torch.tensor(y_test, dtype=torch.float32)
+x_test = torch.tensor(x_test, dtype=torch.float32)
