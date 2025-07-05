@@ -20,6 +20,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch
 import jax
+from pyro.infer.autoguide import AutoNormal
 
 # ------------ config --------------
 SYMBOL = "BTC-USD"
@@ -29,7 +30,7 @@ PERIOD = "1d"
 LOOKBACK = 7
 BATCH_SIZE = 16
 LEARNING_RATE = 0.0001
-EPOCHS = 100
+EPOCHS = 2000
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 # ----------------------------------
 
@@ -66,6 +67,14 @@ y = data.target
 print(y.value_counts(normalize=True))
 
 x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2)
+
+y_mean = y_train.mean()
+y_std = y_train.std()
+y_train = (y_train - y_mean) / y_std
+
+y_mean = y_test.mean()
+y_std = y_test.std()
+y_test = (y_test - y_mean) / y_std
 
 class multinomial_lr():
   def __init__(self):
@@ -160,7 +169,7 @@ class SubNet(PyroModule):
   def __init__(self, input_dim, width):
     super().__init__()
     self.fc1 = PyroModule[nn.Linear](input_dim, width)
-    self.fc1.weight = PyroSample(dist.Normal(0, 1).expand([width, input_dim]).to_event(2))
+    self.fc1.weight = PyroSample(dist.Normal(0, .1).expand([width, input_dim]).to_event(2))
     self.fc1.bias = PyroSample(dist.Normal(0, 1).expand([width]).to_event(1))
 
     self.fc2 = PyroModule[nn.Linear](width, 1)
@@ -176,16 +185,28 @@ class SubNet(PyroModule):
 
 class AdditiveBNN(PyroModule):
   def __init__(self, input_dim, width=20):
+    super().__init__()
     self.net1 = SubNet(input_dim, width)
     self.net2 = SubNet(input_dim, width)
     self.net3 = SubNet(input_dim, width)
 
-  def forward(self, x):
+  def forward(self, x, y=None):
     mean = self.net1(x) + self.net2(x) + self.net3(x)
     sigma = pyro.sample("sigma", dist.Uniform(0, 1))
     with pyro.plate("data", x.shape[0]):
-      ods = pyro.sample("ods", dist.Normal(mean.squeeze(-1), sigma), ods = y)
+      obs = pyro.sample("obs", dist.Normal(mean.squeeze(-1), sigma), obs=y)
     return mean
+
+def guide(x, y=None):
+    for name, module in bnn.named_modules():
+        for param_name, _ in list(module.named_parameters(recurse=False)):
+            loc_name = f"{name}.{param_name}.loc"
+            scale_name = f"{name}.{param_name}.scale"
+            loc = pyro.param(loc_name, torch.randn_like(getattr(module, param_name)))
+            scale = pyro.param(scale_name, 0.1 * torch.ones_like(getattr(module, param_name)), constraint=dist.constraints.positive)
+            pyro.sample(f"{name}.{param_name}", dist.Normal(loc, scale).to_event(getattr(module, param_name).dim()))
+
+    pyro.sample("sigma", dist.Uniform(0.1, 1.0))
 
 scaler = StandardScaler()
 x_train = scaler.fit_transform(x_train)
@@ -196,3 +217,15 @@ x_train = torch.tensor(x_train, dtype=torch.float32)
 
 y_test = torch.tensor(y_test, dtype=torch.float32)
 x_test = torch.tensor(x_test, dtype=torch.float32)
+
+input_dim = x_train.shape[1]
+bnn = AdditiveBNN(input_dim=input_dim, width=20)
+guide = AutoNormal(bnn)
+
+optimizer = Adam({"lr": 0.001})
+svi = SVI(bnn, guide, optimizer, loss=Trace_ELBO())
+
+for step in range(EPOCHS+1):
+  loss = svi.step(x_train, y_train)
+  if step % 100 == 0:
+    print(f"[{step}] ELBO loss: {loss:.4f}")
