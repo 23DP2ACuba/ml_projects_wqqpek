@@ -1,4 +1,8 @@
-import autobnn
+import pyro
+import pyro.distributions as dist
+from pyro.infer import SVI, Trace_ELBO
+from pyro.optim import Adam
+from pyro.nn import PyroModule, PyroSample
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
@@ -9,12 +13,13 @@ import yfinance as yf
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score
 import pandas as pd
+import jax.random as jr
 import numpy as np
 import matplotlib.pyplot as plt
-import numpy as np
 import torch.nn.functional as F
 import torch.nn as nn
 import torch
+import jax
 
 # ------------ config --------------
 SYMBOL = "BTC-USD"
@@ -43,6 +48,7 @@ for i in range(1, LOOKBACK+1):
   idx = f"close-{i}"
   data[idx] = data.close.shift(i)
   features.append(idx)
+
 data["rolling_return_5"] = data["close"].pct_change(3)
 data["log_return_5"] = np.log(data['close'] / data['close'].shift(5))
 data['log_return'] = np.log(data['close'] / data['close'].shift(1))
@@ -88,7 +94,7 @@ class MCDropoutNN(nn.Module):
     def forward(self, x):
       x = self.relu(self.drop(self.fc1(x)))
       return self.fc2(x)
-    
+
 
 
 class TrainMCNN():
@@ -150,13 +156,34 @@ class TrainMCNN():
 
                   print(f"Epoch {epoch} | Train Acc: {train_acc:.4f} | Test Acc: {test_acc:.4f}")
 
-input_dim, hidden_dim, output_dim = x.shape[1], 320, 3
-train = TrainMCNN(input_dim, hidden_dim, output_dim)
-x_train, x_test, y_train, y_test = train.process(x, y)
-train_loader, test_loader = train.load(x_train, x_test, y_train, y_test, BATCH_SIZE)
-train.run(EPOCHS, train_loader, test_loader)
-#prediction
-#probs = torch.stack([model(x) for _ in range(50)])
-#mean_probs = probs.softmax(-1).mean(0)
-#confidence = mean_probs.max(1)[0]
-#mask = confidence > 0.6 
+class SubNet(PyroModule):
+  def __init__(self, input_dim, width):
+    super().__init__()
+    self.fc1 = PyroModule[nn.Linear](input_dim, width)
+    self.fc1.weight = PyroSample(dist.Normal(0, 1).expand([width, input_dim]).to_event(2))
+    self.fc1.bias = PyroSample(dist.Normal(0, 1).expand([width]).to_event(1))
+
+    self.fc2 = PyroModule[nn.Linear](width, 1)
+    self.fc2.weight = PyroSample(dist.Normal(0, 1).expand([1, width]).to_event(2))
+    self.fc2.bias = PyroSample(dist.Normal(0, 1).expand([1]).to_event(1))
+
+    self.relu = nn.ReLU()
+  
+  def forward(self, x):
+    x = self.relu(self.fc1(x))
+    return self.fc2(x)
+
+
+class AdditiveBNN(PyroModule):
+  def __init__(self, input_dim, width=20):
+    self.net1 = SubNet(input_dim, width)
+    self.net2 = SubNet(input_dim, width)
+    self.net3 = SubNet(input_dim, width)
+
+  def forward(self, x):
+    mean = self.net1(x) + self.net2(x) + self.net3(x)
+    sigma = pyro.sample("sigma", dist.Uniform(0, 1))
+    with pyro.plate("data", x.shape[0]):
+      ods = pyro.sample("ods", dist.Normal(mean.squeeze(-1), sigma), ods = y)
+    return mean
+
