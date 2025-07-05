@@ -229,3 +229,25 @@ for step in range(EPOCHS+1):
   loss = svi.step(x_train, y_train)
   if step % 100 == 0:
     print(f"[{step}] ELBO loss: {loss:.4f}")
+
+
+predictive = Predictive(bnn, guide=guide, num_samples=1000)
+samples = predictive(x_test)
+
+y_preds = samples["obs"].detach().numpy()
+
+y_mean = y_preds.mean(axis=0)
+y_std = y_preds.std(axis=0)
+
+# y_mean = y_mean * y_train_std + y_train_mean
+# y_std = y_std * y_train_std
+
+
+plt.figure(figsize=(10, 5))
+plt.plot(y_test.numpy(), label='True')
+plt.plot(y_mean, label='Predicted Mean')
+plt.fill_between(range(len(y_mean)), y_mean - 2*y_std, y_mean + 2*y_std,
+                 alpha=0.3, label='95% CI')
+plt.legend()
+plt.title("BNN Prediction with Pyro")
+plt.show()
