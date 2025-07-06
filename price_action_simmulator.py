@@ -16,10 +16,42 @@ SIMLENGTH = 1
 LOOKBACK = 5
 # ----------------------------------
 
+# Download historical data
 data = yf.Ticker(SYMBOL).history(period=PERIOD, start=START, end=END)[["Open", "High", "Low", "Close", "Volume"]]
 data.columns = data.columns.str.lower()
 
+# ---------- Feature Creators ----------
 
+def create_close_features(data):
+    features = ["close"]
+    for i in range(1, LOOKBACK + 1):
+        lag_col = f"close-{i}"
+        data[lag_col] = data["close"].shift(i)
+        features.append(lag_col)
+
+    data["target"] = data["close"].shift(-SIMLENGTH)
+    data.dropna(inplace=True)
+    return data, features
+
+
+def create_hl_pct_features(data):
+    features = ["close"]
+    for i in range(1, LOOKBACK + 1):
+        lag_col = f"close-{i}"
+        data[lag_col] = data["close"].shift(i)
+        features.append(lag_col)
+
+    data["target"] = (data["high"] - data["low"]) / data["close"]
+    data.dropna(inplace=True)
+    return data, features
+
+def create_vol_pct_features(data):
+    features = ["close", "volume", "target"]
+    data["target"] = data["volume"].shift(-SIMLENGTH)
+    data.dropna(inplace=True)
+    return data, features
+
+# ---------- Training & Simulation Class ----------
 
 class TrainMarketSim:
     def close_sim(self, data, features):
@@ -35,87 +67,71 @@ class TrainMarketSim:
         self.close_model.fit(x_train, y_train)
 
         y_pred = self.close_model.predict(x_test)
-        print("R2 Score:", r2_score(y_test, y_pred))
+        print("Close R2 Score:", r2_score(y_test, y_pred))
 
-        self.features = features
+        self.close_features = features
+        self.last_close_row = data.iloc[-1]
         return self.close_model
 
-    def open_sim(self, data, features):
+      
+
+
+    def hl_pct_sim(self, data, features):
         x = data[features]
         y = data["target"]
 
         x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, shuffle=False)
 
-        self.open_model = TransformedTargetRegressor(
+        self.hl_model = TransformedTargetRegressor(
             regressor=LinearRegression(),
             transformer=StandardScaler()
         )
-        self.open_model.fit(x_train, y_train)
+        self.hl_model.fit(x_train, y_train)
 
-        y_pred = self.open_model.predict(x_test)
-        print("R2 Score:", r2_score(y_test, y_pred))
+        y_pred = self.hl_model.predict(x_test)
+        print("Volume R2 Score:", r2_score(y_test, y_pred))
 
-        self.features = features
-        return self.open_model
-      
+        self.hl_features = features
+        self.last_hl_row = data.iloc[-1]
+        return self.hl_model
 
-    def generate_sequence(self, data, max_steps=20):
-        """
-        Generate a sequence of future closing prices using the last known row
-        """
+    def generate_sequence(self, max_steps=20, noise_std=0.0):
+      close_history = list(self.last_close_row[self.close_features].values.flatten())
+      hl_history = list(self.last_hl_row[self.hl_features].values.flatten())
 
-        start_row = 
-        history = list(start_row[self.features].values.flatten())  
-        simulated_data = []
+      simulated_data = []
 
-        for step in range(max_steps):
-            close_input = np.array(history).reshape(1, -1)
-            next_price = self.close_model.predict(x_input)[0]
-            next_open = self.open_model.predict(x_input)[0]
+      for step in range(max_steps):
+          close_input = np.array(close_history).reshape(1, -1)
+          hl_input = np.array(hl_history).reshape(1, -1)
 
-            simulated_data.append({
-                "step": step,
-                "predicted_close": next_price,
-                "predicted_open": next_open
-            })
+          next_close = self.close_model.predict(close_input)[0]
+          next_hl_pct = self.hl_model.predict(hl_input)[0]
 
-            history = [next_price] + history[:-1]
+          next_close += np.random.normal(loc=0.3, scale=noise_std)
+          next_hl_pct += np.random.normal(loc=0.0, scale=noise_std / 100) 
 
-        return pd.DataFrame(simulated_data)
+          simulated_data.append({
+              "step": step,
+              "predicted_close": next_close,
+              "predicted_hl_pct": next_hl_pct
+          })
 
-def create_close_features(data):
-  features = ["close"]
-  for i in range(1, LOOKBACK + 1):
-      lag_col = f"close-{i}"
-      data[lag_col] = data["close"].shift(i)
-      features.append(lag_col)
+          close_history = [next_close] + close_history[:-1]
+          hl_history = [next_close] + hl_history[:-1]
 
-  data["target"] = data["close"].shift(-SIMLENGTH)
+      return pd.DataFrame(simulated_data)
 
-  data.dropna(inplace=True)
-  return data
-
-
-def create_open_features(data):
-  features = ["open"]
-  for i in range(1, LOOKBACK + 1):
-      lag_col = f"open-{i}"
-      data[lag_col] = data["open"].shift(i)
-      features.append(lag_col)
-
-  data["target"] = data["open"].shift(-SIMLENGTH)
-
-  data.dropna(inplace=True)
-  return data
-
-
+# ---------- Run Training and Simulation ----------
 train = TrainMarketSim()
-close_data = create_close_features(data)
-train.close_sim(close_data, features)
-open_data = create_close_features(data)
-train.open_sim(open_data, features)
 
-last_row = data.iloc[-1]
-simulated_prices = train.generate_sequence(last_row, max_steps=20)
+close_data, close_features = create_close_features(data.copy())
+train.close_sim(close_data, close_features)
 
+hl_data, hl_features = create_hl_pct_features(data.copy())
+train.hl_pct_sim(hl_data, hl_features)
+
+
+
+simulated_prices = train.generate_sequence(max_steps=20, noise_std=2)
 print(simulated_prices)
