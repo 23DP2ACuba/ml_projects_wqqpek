@@ -138,7 +138,7 @@ class TrainMarketSim:
             next_close += np.random.normal(loc=0.0, scale=noise_std)
             next_hl_pct += np.random.normal(loc=0.0, scale=noise_std / 100)
             next_oc_pct += np.random.normal(loc=0.0, scale=noise_std / 100)
-            next_vol += np.random.normal(loc=0.0, scale=noise_std * 10)
+            next_vol += np.random.normal(loc=0.0, scale=noise_std * 6.18e+9)
 
             simulated_data.append({
                 "step": step,
