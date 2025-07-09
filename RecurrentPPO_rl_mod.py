@@ -138,3 +138,12 @@ initial_price = stock_prices[0]
 initial_investment = 1000
 shares = initial_investment / initial_price
 buy_and_hold_values = [shares * sp for sp in stock_prices]
+
+plt.figure(figsize=(12, 6))
+plt.plot(dates, portfolio_values, label='RL Portfolio')
+plt.plot(dates, buy_and_hold_values, label='Buy and Hold')
+plt.xlabel('Date')
+plt.ylabel('Portfolio Value')
+plt.title('RL Portfolio vs Buy and Hold')
+plt.legend()
+plt.show()
