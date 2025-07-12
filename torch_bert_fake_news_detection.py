@@ -36,3 +36,9 @@ def tokenize(batch):
 train_dataset = train_dataset.map(tokenize, batched=True)
 val_dataset = val_dataset.map(tokenize, batched=True)
 
+from torch.utils.data import DataLoader
+train_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
+val_dataset.set_format(type='torch', columns=['input_ids', 'attention_mask', 'label'])
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=32)
