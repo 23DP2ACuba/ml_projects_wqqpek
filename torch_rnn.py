@@ -21,6 +21,22 @@ class RNN(nn.Module):
     out = self.fc(out)
     return out
 
+class BRNN(nn.Module):
+  def __init__(self, input_size, hidden_size, num_layers, num_classes):
+    super(RNN, self).__init__()
+    self.hidden_size = hidden_size
+    self.num_layers = num_layers
+    self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first = True, bidirectional=True)
+    self.fc = nn.Linear(hidden_size*2, num_classes)
+
+  def forward(self, x):
+    h0 = torch.zeros(self.num_layers*2, x.size(0), self.hidden_size).to(device)
+    c0 = torch.zeros(self.num_layers*2, x.size(0), self.hidden_size).to(device)
+    
+    out, _ = self.lstm(x, (h0, c0))
+    out = self.fc(out[:, -1, :])
+    return out
+
 device = torch.device('cpu')
 input_size = 28
 sequence_length = 28
@@ -36,7 +52,7 @@ train_loader = DataLoader(dataset = train_dataset, batch_size = batch_size, shuf
 test_dataset = datasets.MNIST(root="dataset/", train = False, transform = transforms.ToTensor(), download=True)
 test_loader = DataLoader(dataset = test_dataset, batch_size = batch_size, shuffle = True)
 
-model = RNN(input_size, hidden_size, num_layers, num_classes).to(device)
+model = BRNN(input_size, hidden_size, num_layers, num_classes).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=lr)
