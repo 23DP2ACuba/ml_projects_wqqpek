@@ -118,3 +118,21 @@ def simulate_trades(df, entry_col="TradeTF", sl_pct=0.02, tp_pct=0.05, n_days=10
     return df.dropna()
 
 
+x_train = simulate_trades(x_train)
+x_test = simulate_trades(x_test)
+x_train["Target"].value_counts()
+y_train = x_train["Target"]
+y_test = x_test["Target"]
+
+x_train = x_train[x_train.columns.difference(["Target"])]
+x_test = x_test[x_train.columns.difference(["Target"])]
+
+pl_pipeline = Pipeline([
+    ("scaler", StandardScaler()),
+    ("pca", PCA(n_components=0.95)), 
+    ("model", RandomForestClassifier(n_estimators=150))
+])
+
+pl_pipeline.fit(x_train, y_train)
+y_pred = pl_pipeline.predict(x_test)
+print("Accuracy score:", accuracy_score(y_test, y_pred))
