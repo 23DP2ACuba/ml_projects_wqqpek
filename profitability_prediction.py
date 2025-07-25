@@ -86,4 +86,35 @@ x_test["TradeTF"] = y_pred
 x_train["TradeTF"] = rf_pipeline.predict(x_train)
 x_train["TradeTF"].value_counts()
 
+def simulate_trades(df, entry_col="TradeTF", sl_pct=0.02, tp_pct=0.05, n_days=10):
+    df = df.copy()
+
+    new_target = []
+
+    for i in range(len(df) - n_days):
+        if df.iloc[i][entry_col] != 1:
+            new_target.append(np.nan)
+            continue
+
+        entry_price = df.iloc[i + 1]["Open"]  
+        high_window = df["High"].iloc[i + 1:i + 1 + n_days].values
+        low_window = df["Low"].iloc[i + 1:i + 1 + n_days].values
+
+        hit_tp = np.any((high_window - entry_price) / entry_price >= tp_pct)
+        hit_sl = np.any((entry_price - low_window) / entry_price >= sl_pct)
+
+        if hit_tp and not hit_sl:
+            new_target.append(1)
+        elif hit_sl and not hit_tp:
+            new_target.append(0)
+        elif hit_tp and hit_sl:
+            tp_index = np.argmax((high_window - entry_price) / entry_price >= tp_pct)
+            sl_index = np.argmax((entry_price - low_window) / entry_price >= sl_pct)
+            new_target.append(1 if tp_index <= sl_index else 0)
+        else:
+            new_target.append(np.nan)
+
+    df["Target"] = new_target + [np.nan] * n_days
+    return df.dropna()
+
 
