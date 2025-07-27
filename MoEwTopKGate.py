@@ -179,3 +179,9 @@ for epoch in range(epochs):
 
     print(f" Loss: {total_loss:.4f}")
 
+# Epoch 100 >>> Test Loss: 0.5139
+# |Test Loss: 0.5670
+# |Test Loss: 0.6160
+# |Test Loss: 0.5448
+# |Test Loss: 0.5693
+# | Loss: 26.4870
