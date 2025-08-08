@@ -88,8 +88,7 @@ class DecisionTreeModel:
         self.data = self.get_features()
         x = self.data.select_dtypes(include=['float64', 'int64', 'int32']).drop(columns=['Target'], errors='ignore')
         y = self.data["Target"]
-        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, shuffle=False)
-        self.x_test = x_test
+        x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size)
         self.pipeline.fit(x_train, y_train)
         features = x.columns
         y_pred = self.pipeline.predict(x_test)
@@ -101,7 +100,7 @@ class DecisionTreeModel:
         return self.pipeline.predict(x)
 
     def simulate_trades(self):
-        df = self.x_test.copy()
+        df = self.data.copy()
         x = df.select_dtypes(include=['float64', 'int64', 'int32']).drop(columns=['Target'], errors='ignore')
         df['Predicted'] = self.predict(x)
         
